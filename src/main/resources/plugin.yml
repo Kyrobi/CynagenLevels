@@ -1,0 +1,11 @@
+name: CynagenLevels
+version: '${project.version}'
+main: me.kyrobi.cynagenlevels.CynagenLevels
+api-version: '1.20'
+depend:
+  - DiscordSRV
+commands:
+  addplayer:
+    description: Add player to the system
+  level:
+    description: Get your level
