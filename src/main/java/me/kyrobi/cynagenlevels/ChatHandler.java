@@ -4,6 +4,8 @@ import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.ListenerPriority;
 import github.scarsz.discordsrv.api.Subscribe;
 import github.scarsz.discordsrv.api.events.DiscordGuildMessageReceivedEvent;
+import github.scarsz.discordsrv.dependencies.jda.api.entities.TextChannel;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
@@ -32,7 +34,7 @@ public class ChatHandler implements Listener {
     Listens to when a player chats ingame
      */
     @EventHandler
-    public void onPlayerChatIngame(AsyncPlayerChatEvent e){
+    public void onPlayerChatIngame(AsyncChatEvent e){
 
 //        if(!e.getPlayer().getName().equals("Kyrobi")){
 //            return;
@@ -51,7 +53,10 @@ public class ChatHandler implements Listener {
                 return;
             }
 
-            giveEXP(uuid);
+            int levelUpFlag = giveEXP(uuid);
+            if(levelUpFlag > 0){
+                Bukkit.broadcastMessage(player.getName() + " advanced to level " + levelUpFlag);
+            }
 
             long currentLevel = getCurrentLevel(uuid);
             long currentEXP = getCurrentEXP(uuid);
@@ -87,7 +92,11 @@ public class ChatHandler implements Listener {
                 return;
             }
 
-            giveEXP(player.getUniqueId().toString());
+            int levelUpFlag = giveEXP(player.getUniqueId().toString());
+            if(levelUpFlag > 0){
+                TextChannel txt = DiscordSRV.getPlugin().getJda().getTextChannelById("415873891857203214");
+                txt.sendMessage(player.getName() + " advanced to level " + levelUpFlag).queue();
+            }
 
             long currentLevel = getCurrentLevel(uuid);
             long currentEXP = getCurrentEXP(uuid);

@@ -34,7 +34,6 @@ public class CommandLevel implements CommandExecutor {
             }
 
             Player player = (Player) commandSender;
-            System.out.println("Sending message");
             commandSender.sendMessage(getStatsForIngame(player.getUniqueId().toString()));
             return false;
         }

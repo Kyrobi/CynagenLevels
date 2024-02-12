@@ -107,7 +107,8 @@ public class LevelHandler {
         return 5 * (currentLevel * currentLevel) + (50 * currentLevel) + 100 - currentEXP;
     }
 
-    static void giveEXP(String minecraftUUID){
+    static int giveEXP(String minecraftUUID){
+        int returnValue = 0;
         if(!userCache.containsKey(String.valueOf(minecraftUUID))){
             putUserIntoCache(String.valueOf(minecraftUUID));
         }
@@ -125,12 +126,14 @@ public class LevelHandler {
         if(expToGive >= EXPNeededUntilNextLevel){
             newLevel++;
             newCurrentEXP = expToGive - EXPNeededUntilNextLevel;
+            returnValue = (int) newLevel;
         }
         else {
             newCurrentEXP += expToGive;
         }
 
         userCache.put(minecraftUUID, new Long[]{newLevel, newCurrentEXP});
+        return returnValue;
 
         // Update the level logic
     }
@@ -205,11 +208,9 @@ public class LevelHandler {
 
         string.append(ChatColor.AQUA + "Name: " + ChatColor.WHITE + Bukkit.getOfflinePlayer(UUID.fromString(minecraftUUID)).getName() + "\n");
         string.append(ChatColor.AQUA + "Level: " + ChatColor.WHITE + getCurrentLevel(minecraftUUID) + "\n");
-        string.append(ChatColor.AQUA + "Progress: " + ChatColor.WHITE + insertCommasIntoNumber(currentEXP)  + ChatColor.GRAY + "/" + ChatColor.WHITE + insertCommasIntoNumber(totalEXPNeeded) + "\n");
+        string.append(ChatColor.AQUA + "Progress: " + ChatColor.WHITE + insertCommasIntoNumber(currentEXP)  + ChatColor.GRAY + "/" + ChatColor.WHITE + insertCommasIntoNumber(totalEXPNeeded) + ChatColor.AQUA + "\n[" + ChatColor.WHITE + getEXPBar(minecraftUUID) + ChatColor.AQUA + "]\n");
 
-        string.append(ChatColor.GRAY + "\n" +"Chatting will give you EXP." + "\n");
-        string.append(ChatColor.GRAY + "If you have your Discord account linked, you" + "\n");
-        string.append(ChatColor.GRAY + "will also get EXP from chatting on Discord." + "\n");
+        string.append(ChatColor.GRAY + "\n" +"Chatting will give you EXP" + "\n");
 
         string.append(ChatColor.GRAY + "---------------");
 
@@ -231,13 +232,11 @@ public class LevelHandler {
 
         string.append("---------------\n");
 
-        string.append("Name: " + DiscordSRV.getPlugin().getJda().getUserById(userID).getAsTag() + "\n");
-        string.append("Level: " + getCurrentLevel(minecraftUUID) + "\n");
-        string.append("Progress: " + insertCommasIntoNumber(getCurrentEXP(minecraftUUID))  + "/" + insertCommasIntoNumber(totalEXPNeeded) + "\n");
+        string.append("**Name**: " + DiscordSRV.getPlugin().getJda().getUserById(userID).getAsTag() + "\n");
+        string.append("**Level**: " + getCurrentLevel(minecraftUUID) + "\n");
+        string.append("**Progress**: " + insertCommasIntoNumber(getCurrentEXP(minecraftUUID))  + "/" + insertCommasIntoNumber(totalEXPNeeded) + "\n**[**" + getEXPBar(minecraftUUID) + "**]**" + "\n");
 
         string.append("\n`Chatting will give you EXP.`" + "\n");
-        string.append("`If you have your Discord account linked, you`" + "\n");
-        string.append("`will also get EXP from chatting in-game.`" + "\n");
 
         string.append( "---------------");
 
@@ -250,11 +249,27 @@ public class LevelHandler {
         return formatter.format(number);
     }
 
-    public static boolean isLong(String input) {
-        return input.matches("^\\d+$");
-    }
 
-    public static boolean isUUID(String input) {
-        return input.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+    public static String getEXPBar(String minecraftUUID){
+        long currentEXP = getCurrentEXP(minecraftUUID);
+        long currentLevel = getCurrentLevel(minecraftUUID);
+        long maxEXP = currentEXP + getEXPNeededUntilNextLevel(currentLevel, currentEXP);
+
+        double percentageCompleted = (double) currentEXP / maxEXP;
+        int completedValue = (int) Math.floor(percentageCompleted);
+
+        StringBuilder progressBar = new StringBuilder();
+
+        for(int i = 0; i < 10; i++){
+            if(i <= completedValue){
+                progressBar.append("\uD83D\uDFE9");
+            }
+            else{
+                progressBar.append("⬜");
+            }
+        }
+
+
+        return progressBar.toString();
     }
 }
