@@ -2,6 +2,7 @@ package me.kyrobi.cynagenlevels;
 
 import github.scarsz.discordsrv.DiscordSRV;
 import me.kyrobi.cynagenlevels.Commands.CommandAddPlayer;
+import me.kyrobi.cynagenlevels.Commands.CommandLeaderboard;
 import me.kyrobi.cynagenlevels.Commands.CommandLevel;
 import me.kyrobi.cynagenlevels.Commands.CommandLevelDiscord;
 import org.bukkit.command.CommandExecutor;
@@ -13,6 +14,7 @@ public final class CynagenLevels extends JavaPlugin {
 
     private ChatHandler discordsrvListener;
     private CommandLevelDiscord discordsrvListenerCommands;
+    private CommandLeaderboard discordsrvListenerCommandLeaderboard;
 
     @Override
     public void onEnable() {
@@ -25,8 +27,12 @@ public final class CynagenLevels extends JavaPlugin {
         discordsrvListenerCommands = new CommandLevelDiscord();
         DiscordSRV.api.subscribe(discordsrvListenerCommands);
 
+        discordsrvListenerCommandLeaderboard = new CommandLeaderboard(this);
+        DiscordSRV.api.subscribe(discordsrvListenerCommandLeaderboard);
+
         this.getCommand("addplayer").setExecutor((CommandExecutor)new CommandAddPlayer(this));
         this.getCommand("level").setExecutor((CommandExecutor)new CommandLevel(this));
+        this.getCommand("leveltop").setExecutor((CommandExecutor)discordsrvListenerCommandLeaderboard);
 
     }
 
@@ -34,6 +40,7 @@ public final class CynagenLevels extends JavaPlugin {
     public void onDisable() {
         DiscordSRV.api.unsubscribe(discordsrvListener);
         DiscordSRV.api.unsubscribe(discordsrvListenerCommands);
+        DiscordSRV.api.unsubscribe(discordsrvListenerCommandLeaderboard);
         saveCacheToSQL();
     }
 }

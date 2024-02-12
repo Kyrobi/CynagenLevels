@@ -9,3 +9,5 @@ commands:
     description: Add player to the system
   level:
     description: Get your level
+  leveltop:
+    description: Get the level leaderboard
