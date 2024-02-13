@@ -55,7 +55,7 @@ public class ChatHandler implements Listener {
 
             int levelUpFlag = giveEXP(uuid);
             if(levelUpFlag > 0){
-                Bukkit.broadcastMessage(player.getName() + " advanced to level " + levelUpFlag);
+                Bukkit.broadcastMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to level " + ChatColor.AQUA + levelUpFlag);
             }
 
             long currentLevel = getCurrentLevel(uuid);
@@ -92,10 +92,11 @@ public class ChatHandler implements Listener {
                 return;
             }
 
+            User discordUser = getDiscordUser(UUID.fromString(uuid));
             int levelUpFlag = giveEXP(player.getUniqueId().toString());
             if(levelUpFlag > 0){
                 TextChannel txt = DiscordSRV.getPlugin().getJda().getTextChannelById("415873891857203214");
-                txt.sendMessage(player.getName() + " advanced to level " + levelUpFlag).queue();
+                txt.sendMessage( discordUser.getAsMention() + " advanced to level " + levelUpFlag).queue();
             }
 
             long currentLevel = getCurrentLevel(uuid);

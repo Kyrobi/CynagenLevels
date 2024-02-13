@@ -254,21 +254,29 @@ public class LevelHandler {
 
 
     public static String getEXPBar(String minecraftUUID){
+        final int totalBarSize = 10; // Sets how long the progress bar is
         long currentEXP = getCurrentEXP(minecraftUUID);
         long currentLevel = getCurrentLevel(minecraftUUID);
         long maxEXP = currentEXP + getEXPNeededUntilNextLevel(currentLevel, currentEXP);
 
-        double percentageCompleted = (double) currentEXP / maxEXP;
+        double percentageCompleted = ((double) currentEXP / maxEXP) * 100;
+
+        System.out.println("Current: " + currentEXP);
+        System.out.println("maxEXP: " + maxEXP);
+        System.out.println("% completed: " + percentageCompleted);
+
         int completedValue = (int) Math.floor(percentageCompleted);
 
         StringBuilder progressBar = new StringBuilder();
 
-        for(int i = 0; i < 10; i++){
-            if(i <= completedValue){
-                progressBar.append("\uD83D\uDFE9");
+        System.out.println("completedValue: " + completedValue);
+
+        for(int i = 0; i < totalBarSize; i++){
+            if(completedValue/10 >= i){
+                progressBar.append("\uD83D\uDFE9"); // Represents filled section
             }
             else{
-                progressBar.append("⬜");
+                progressBar.append("⬜"); // Represents empty sections
             }
         }
 
