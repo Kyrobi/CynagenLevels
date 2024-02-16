@@ -40,7 +40,7 @@ public class CommandLevel implements CommandExecutor {
 
         else if(args.length == 1){
             OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(args[0]);
-            if(offlinePlayer == null){
+            if(!offlinePlayer.hasPlayedBefore()){
                 commandSender.sendMessage(ChatColor.RED + "Player data doesn't exist");
                 return false;
             }
