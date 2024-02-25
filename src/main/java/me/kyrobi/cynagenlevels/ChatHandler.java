@@ -4,8 +4,12 @@ import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.ListenerPriority;
 import github.scarsz.discordsrv.api.Subscribe;
 import github.scarsz.discordsrv.api.events.DiscordGuildMessageReceivedEvent;
+import github.scarsz.discordsrv.dependencies.jda.api.JDA;
 import github.scarsz.discordsrv.dependencies.jda.api.entities.TextChannel;
+import github.scarsz.discordsrv.dependencies.jda.api.entities.Role;
+import github.scarsz.discordsrv.dependencies.jda.api.entities.*;
 import io.papermc.paper.event.player.AsyncChatEvent;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
@@ -17,17 +21,54 @@ import github.scarsz.discordsrv.dependencies.jda.api.entities.User;
 import github.scarsz.discordsrv.util.DiscordUtil;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import static me.kyrobi.cynagenlevels.LevelHandler.*;
 
 public class ChatHandler implements Listener {
 
     CynagenLevels plugin;
+    JDA jda;
+    Guild guild;
+
+    private ArrayList<Pattern> filteredChat = new ArrayList<>();
+    private ArrayList<String> whitelistedWords = new ArrayList<>();
+
+    private HashMap<Integer, Role> levelRoles = new HashMap<>();
 
     public ChatHandler(CynagenLevels plugin){
         this.plugin = plugin;
+        this.jda = DiscordUtil.getJda();
+        guild = jda.getGuildById("415873891857203212");
+
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
+
+        filteredChat.add(Pattern.compile(
+                "[a-zA-Z0-9\\-\\.\\*]+\\s?(\\.|\\*|dot|\\(dot\\)|-|\\(\\*\\)|;|:|,)\\s?(c(| +)o(| +)m|o(| +)r(| +)g|n(| +)e(| +)t|(?<! )c(| +)z|(?<! )c(| +)o|(?<! )u(| +)k|(?<! )s(| +)k|b(| +)i(| +)z|(?<! )m(| +)o(| +)b(| +)i|(?<! )x(| +)x(| +)x|(?<! )e(| +)u|(?<! )m(| +)e|(?<! )i(| +)o|(?<! )o(| +)n(| +)l(| +)i(| +)n(| +)e|(?<! )x(| +)y(| +)z|(?<! )f(| +)r|(?<! )b(| +)e|(?<! )d(| +)e|(?<! )c(| +)a|(?<! )a(| +)l|(?<! )a(| +)i|(?<! )d(| +)e(| +)v|(?<! )a(| +)p(| +)p|(?<! )i(| +)n|(?<! )i(| +)s|(?<! )g(| +)g|(?<! )t(| +)o|(?<! )p(| +)h|(?<! )n(| +)l|(?<! )i(| +)d|(?<! )i(| +)n(| +)c|(?<! )u(| +)s|(?<! )p(| +)w|(?<! )p(| +)r(| +)o|(?<! )t(| +)v|(?<! )c(| +)x|(?<! )m(| +)x|(?<! )f(| +)m|(?<! )c(| +)c|(?<! )v(| +)i(| +)p|(?<! )f(| +)u(| +)n|(?<! )i(| +)c(| +)u)\\b"
+                , Pattern.CASE_INSENSITIVE));
+
+        whitelistedWords.add("https://discordapp.com/invite/B5JW7qp");
+
+        // levelRoles.put("VIP", guild.getRoleById(469284766240210944L) ); // VIP
+        levelRoles.put(10, guild.getRoleById(750227892822212759L) ); // Level 10
+        levelRoles.put(20, guild.getRoleById(750228204832292885L) ); // Level 20
+        levelRoles.put(30, guild.getRoleById(750229923100229693L) ); // Level 30
+        levelRoles.put(40, guild.getRoleById(750228369924423730L) ); // Level 40
+        levelRoles.put(50, guild.getRoleById(750228746161618955L) ); // Level 50
+        levelRoles.put(60, guild.getRoleById(750228484072407060L) ); // Level 60
+        levelRoles.put(70, guild.getRoleById(750230251811897385L) ); // Level 70
+        levelRoles.put(80, guild.getRoleById(750229654803185725L) ); // Level 80
+        levelRoles.put(85, guild.getRoleById(750230843062222888L) ); // Level 85
+        levelRoles.put(90, guild.getRoleById(750230496075579444L) ); // Level 90
+        levelRoles.put(95, guild.getRoleById(750231302711672832L) ); // Level 95
+        levelRoles.put(100, guild.getRoleById(750231871744376833L) ); // Level 100
+
+        System.out.println("Guild: " + guild.getName());
+
     }
 
     /*
@@ -39,6 +80,7 @@ public class ChatHandler implements Listener {
 //        if(!e.getPlayer().getName().equals("Kyrobi")){
 //            return;
 //        }
+
         Player player = e.getPlayer();
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -56,6 +98,11 @@ public class ChatHandler implements Listener {
             int levelUpFlag = giveEXP(uuid);
             if(levelUpFlag > 0){
 
+                User discordUser = getDiscordUser(UUID.fromString(uuid));
+                if(discordUser != null){
+                    tryToGiveRankOnDiscord(discordUser, levelUpFlag);
+                }
+
                 // To prevent spam, only show in server chat if they reach lvl 10+
                 if(levelUpFlag > 9){
                     Bukkit.broadcastMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to level " + ChatColor.AQUA + levelUpFlag);
@@ -72,11 +119,11 @@ public class ChatHandler implements Listener {
             long total = getEXPNeededUntilNextLevel(currentLevel, currentEXP) + currentEXP;
 
 
-            System.out.println("\n"+
-                    "Current Level: " + currentLevel + "\n"+
-                    "Current EXP: " + currentEXP + "\n"+
-                    "EXP Bar: " + "[ " + currentEXP + " / " + total + "] \n"
-            );
+//            System.out.println("\n"+
+//                    "Current Level: " + currentLevel + "\n"+
+//                    "Current EXP: " + currentEXP + "\n"+
+//                    "EXP Bar: " + "[ " + currentEXP + " / " + total + "] \n"
+//            );
 
         });
 
@@ -106,6 +153,7 @@ public class ChatHandler implements Listener {
             if(levelUpFlag > 0){
                 TextChannel txt = DiscordSRV.getPlugin().getJda().getTextChannelById("448488708883218442");
                 txt.sendMessage( discordUser.getAsMention() + " advanced to level " + levelUpFlag).queue();
+                tryToGiveRankOnDiscord(discordUser, levelUpFlag);
             }
 
             long currentLevel = getCurrentLevel(uuid);
@@ -113,11 +161,11 @@ public class ChatHandler implements Listener {
             long total = getEXPNeededUntilNextLevel(currentLevel, currentEXP) + currentEXP;
 
 
-            System.out.println("\n"+
-                    "Current Level: " + currentLevel + "\n"+
-                    "Current EXP: " + currentEXP + "\n"+
-                    "EXP Bar: " + "[ " + currentEXP + " / " + total + "] \n"
-            );
+//            System.out.println("\n"+
+//                    "Current Level: " + currentLevel + "\n"+
+//                    "Current EXP: " + currentEXP + "\n"+
+//                    "EXP Bar: " + "[ " + currentEXP + " / " + total + "] \n"
+//            );
 
         });
     }
@@ -146,4 +194,83 @@ public class ChatHandler implements Listener {
         return null;
     }
 
+    private void tryToGiveRankOnDiscord(User discordUser, int newLevel){
+        Member member = guild.getMemberById(discordUser.getId());
+
+        if(member == null){
+            return;
+        }
+
+        // Level 100
+        if(newLevel >= 100){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(100)).queue();
+        }
+
+        else if(newLevel >= 95){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(95)).queue();
+        }
+
+        else if(newLevel >= 90){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(90)).queue();
+        }
+
+        else if(newLevel >= 85){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(85)).queue();
+        }
+
+        else if(newLevel >= 80){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(80)).queue();
+        }
+
+        else if(newLevel >= 70){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(70)).queue();
+        }
+
+        else if(newLevel >= 60){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(60)).queue();
+        }
+
+        else if(newLevel >= 50){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(50)).queue();
+        }
+
+        else if(newLevel >= 40){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(40)).queue();
+        }
+
+        else if(newLevel >= 30){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(30)).queue();
+        }
+
+        else if(newLevel >= 20){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(20)).queue();
+        }
+
+        else if(newLevel >= 10){
+            removeRoles(discordUser);
+            guild.addRoleToMember(member, levelRoles.get(10)).queue();
+        }
+    }
+
+    private void removeRoles(User discordUser){
+        Member member = guild.getMemberById(discordUser.getId());
+        List<Role> userRoles = member.getRoles();
+
+        for(Role r: userRoles){
+            if(levelRoles.containsValue(r)){
+                guild.removeRoleFromMember(member, r).queue();
+            }
+        }
+    }
 }

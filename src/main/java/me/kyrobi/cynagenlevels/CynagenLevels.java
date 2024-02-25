@@ -1,6 +1,8 @@
 package me.kyrobi.cynagenlevels;
 
 import github.scarsz.discordsrv.DiscordSRV;
+import github.scarsz.discordsrv.dependencies.jda.api.JDA;
+import github.scarsz.discordsrv.util.DiscordUtil;
 import me.kyrobi.cynagenlevels.Commands.CommandAddPlayer;
 import me.kyrobi.cynagenlevels.Commands.CommandLeaderboard;
 import me.kyrobi.cynagenlevels.Commands.CommandLevel;
@@ -19,6 +21,7 @@ public final class CynagenLevels extends JavaPlugin {
     @Override
     public void onEnable() {
         this.saveDefaultConfig();
+
         new LevelHandler(this);
 
         discordsrvListener = new ChatHandler(this);
