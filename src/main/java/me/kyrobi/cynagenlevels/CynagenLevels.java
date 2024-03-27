@@ -7,6 +7,7 @@ import me.kyrobi.cynagenlevels.Commands.CommandAddPlayer;
 import me.kyrobi.cynagenlevels.Commands.CommandLeaderboard;
 import me.kyrobi.cynagenlevels.Commands.CommandLevel;
 import me.kyrobi.cynagenlevels.Commands.CommandLevelDiscord;
+import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -22,20 +23,22 @@ public final class CynagenLevels extends JavaPlugin {
     public void onEnable() {
         this.saveDefaultConfig();
 
-        new LevelHandler(this);
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            new LevelHandler(this);
 
-        discordsrvListener = new ChatHandler(this);
-        DiscordSRV.api.subscribe(discordsrvListener);
+            discordsrvListener = new ChatHandler(this);
+            DiscordSRV.api.subscribe(discordsrvListener);
 
-        discordsrvListenerCommands = new CommandLevelDiscord();
-        DiscordSRV.api.subscribe(discordsrvListenerCommands);
+            discordsrvListenerCommands = new CommandLevelDiscord();
+            DiscordSRV.api.subscribe(discordsrvListenerCommands);
 
-        discordsrvListenerCommandLeaderboard = new CommandLeaderboard(this);
-        DiscordSRV.api.subscribe(discordsrvListenerCommandLeaderboard);
+            discordsrvListenerCommandLeaderboard = new CommandLeaderboard(this);
+            DiscordSRV.api.subscribe(discordsrvListenerCommandLeaderboard);
 
-        this.getCommand("addplayer").setExecutor((CommandExecutor)new CommandAddPlayer(this));
-        this.getCommand("level").setExecutor((CommandExecutor)new CommandLevel(this));
-        this.getCommand("leveltop").setExecutor((CommandExecutor)discordsrvListenerCommandLeaderboard);
+            this.getCommand("addplayer").setExecutor((CommandExecutor)new CommandAddPlayer(this));
+            this.getCommand("level").setExecutor((CommandExecutor)new CommandLevel(this));
+            this.getCommand("leveltop").setExecutor((CommandExecutor)discordsrvListenerCommandLeaderboard);
+        }, 20L * 10);
 
     }
 

@@ -208,8 +208,8 @@ public class LevelHandler {
         string.append(ChatColor.GRAY + "---------------\n");
 
         string.append(ChatColor.AQUA + "Name: " + ChatColor.WHITE + Bukkit.getOfflinePlayer(UUID.fromString(minecraftUUID)).getName() + "\n");
-        string.append(ChatColor.AQUA + "Rank: " + ChatColor.WHITE + "#" +  getPlayerRank(minecraftUUID) + "\n");
         string.append(ChatColor.AQUA + "Level: " + ChatColor.WHITE + getCurrentLevel(minecraftUUID) + "\n");
+        string.append(ChatColor.AQUA + "Rank: " + ChatColor.WHITE + "#" +  getPlayerRank(minecraftUUID) + "\n");
         string.append(ChatColor.AQUA + "Progress: " + ChatColor.WHITE + insertCommasIntoNumber(currentEXP)  + ChatColor.GRAY + "/" + ChatColor.WHITE + insertCommasIntoNumber(totalEXPNeeded) + ChatColor.AQUA + "\n[" + ChatColor.WHITE + getEXPBar(minecraftUUID) + ChatColor.AQUA + "]\n");
 
         string.append(ChatColor.GRAY + "\n" +"Chatting will give you EXP" + "\n");
@@ -235,8 +235,8 @@ public class LevelHandler {
         string.append("---------------\n");
 
         string.append("**Name**: " + DiscordSRV.getPlugin().getJda().getUserById(userID).getAsTag() + "\n");
-        string.append("**Rank**: " + " #" +getPlayerRank(minecraftUUID) + "\n");
         string.append("**Level**: " + getCurrentLevel(minecraftUUID) + "\n");
+        string.append("**Rank**: " + " #" +getPlayerRank(minecraftUUID) + "\n");
         string.append("**Progress**: " + insertCommasIntoNumber(getCurrentEXP(minecraftUUID))  + "/" + insertCommasIntoNumber(totalEXPNeeded) + "\n**[**" + getEXPBar(minecraftUUID) + "**]**" + "\n");
 
         string.append("\n`Chatting will give you EXP.`" + "\n");

@@ -105,11 +105,11 @@ public class ChatHandler implements Listener {
 
                 // To prevent spam, only show in server chat if they reach lvl 10+
                 if(levelUpFlag > 9){
-                    Bukkit.broadcastMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to level " + ChatColor.AQUA + levelUpFlag);
+                    Bukkit.broadcastMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to chat level " + ChatColor.AQUA + levelUpFlag);
                     player.sendMessage(ChatColor.GRAY + "For more info, use /level");
                 }
                 else{
-                    player.sendMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to level " + ChatColor.AQUA + levelUpFlag);
+                    player.sendMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to chat level " + ChatColor.AQUA + levelUpFlag);
                     player.sendMessage(ChatColor.GRAY + "For more info, use /level");
                 }
             }
@@ -152,7 +152,7 @@ public class ChatHandler implements Listener {
             int levelUpFlag = giveEXP(player.getUniqueId().toString());
             if(levelUpFlag > 0){
                 TextChannel txt = DiscordSRV.getPlugin().getJda().getTextChannelById("448488708883218442");
-                txt.sendMessage( discordUser.getAsMention() + " advanced to level " + levelUpFlag).queue();
+                txt.sendMessage( discordUser.getAsMention() + " advanced to chat level " + levelUpFlag).queue();
                 tryToGiveRankOnDiscord(discordUser, levelUpFlag);
             }
 
