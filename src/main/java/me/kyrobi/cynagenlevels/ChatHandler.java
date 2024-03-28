@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 import static me.kyrobi.cynagenlevels.LevelHandler.*;
@@ -105,11 +106,11 @@ public class ChatHandler implements Listener {
 
                 // To prevent spam, only show in server chat if they reach lvl 10+
                 if(levelUpFlag > 9){
-                    Bukkit.broadcastMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to level " + ChatColor.AQUA + levelUpFlag);
+                    Bukkit.broadcastMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to chat level " + ChatColor.AQUA + levelUpFlag);
                     player.sendMessage(ChatColor.GRAY + "For more info, use /level");
                 }
                 else{
-                    player.sendMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to level " + ChatColor.AQUA + levelUpFlag);
+                    player.sendMessage(ChatColor.DARK_AQUA + player.getName() + " advanced to chat level " + ChatColor.AQUA + levelUpFlag);
                     player.sendMessage(ChatColor.GRAY + "For more info, use /level");
                 }
             }
@@ -137,6 +138,11 @@ public class ChatHandler implements Listener {
         if(e.getChannel().getName().equals("spam")){ return; }
         // if(!e.getMember().getId().equals("559428414709301279")){ return; }
 
+        // We will try to give the user the role upon a message send. If a role was sucessfully given,
+        String minecraftUUID = String.valueOf(getMinecraftUser(e.getAuthor().getId()).getUniqueId());
+        int currentLevel = (int) getCurrentLevel(minecraftUUID);
+        tryToGiveRankOnDiscord(e.getAuthor(), currentLevel);
+
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             OfflinePlayer player = getMinecraftUser(e.getMember().getId());
             if(player == null){ return; }
@@ -152,13 +158,13 @@ public class ChatHandler implements Listener {
             int levelUpFlag = giveEXP(player.getUniqueId().toString());
             if(levelUpFlag > 0){
                 TextChannel txt = DiscordSRV.getPlugin().getJda().getTextChannelById("448488708883218442");
-                txt.sendMessage( discordUser.getAsMention() + " advanced to level " + levelUpFlag).queue();
+                txt.sendMessage( discordUser.getAsMention() + " advanced to chat level " + levelUpFlag).queue();
                 tryToGiveRankOnDiscord(discordUser, levelUpFlag);
             }
 
-            long currentLevel = getCurrentLevel(uuid);
-            long currentEXP = getCurrentEXP(uuid);
-            long total = getEXPNeededUntilNextLevel(currentLevel, currentEXP) + currentEXP;
+//            long currentLevel = getCurrentLevel(uuid);
+//            long currentEXP = getCurrentEXP(uuid);
+//            long total = getEXPNeededUntilNextLevel(currentLevel, currentEXP) + currentEXP;
 
 
 //            System.out.println("\n"+
@@ -194,73 +200,113 @@ public class ChatHandler implements Listener {
         return null;
     }
 
-    private void tryToGiveRankOnDiscord(User discordUser, int newLevel){
+    private int tryToGiveRankOnDiscord(User discordUser, int newLevel){
         Member member = guild.getMemberById(discordUser.getId());
 
         if(member == null){
-            return;
+            return -1;
         }
+
+        List<Role> rolesOfUser = member.getRoles();
 
         // Level 100
         if(newLevel >= 100){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(100)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(100))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(100)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 100;
+            }
         }
 
         else if(newLevel >= 95){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(95)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(95))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(95)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 95;
+            }
         }
 
         else if(newLevel >= 90){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(90)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(90))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(90)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 90;
+            }
         }
 
         else if(newLevel >= 85){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(85)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(85))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(85)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 85;
+            }
         }
 
         else if(newLevel >= 80){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(80)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(80))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(80)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 80;
+            }
         }
 
         else if(newLevel >= 70){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(70)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(70))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(70)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 70;
+            }
         }
 
         else if(newLevel >= 60){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(60)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(60))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(60)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 60;
+            }
         }
 
         else if(newLevel >= 50){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(50)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(50))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(50)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 50;
+            }
         }
 
         else if(newLevel >= 40){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(40)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(40))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(40)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 40;
+            }
         }
 
         else if(newLevel >= 30){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(30)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(30))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(30)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 30;
+            }
         }
 
         else if(newLevel >= 20){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(20)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(20))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(20)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 20;
+            }
         }
 
         else if(newLevel >= 10){
-            removeRoles(discordUser);
-            guild.addRoleToMember(member, levelRoles.get(10)).queue();
+            if(!rolesOfUser.contains(levelRoles.get(10))){
+                removeRoles(discordUser);
+                guild.addRoleToMember(member, levelRoles.get(10)).queueAfter(200, TimeUnit.MILLISECONDS);
+                return 10;
+            }
         }
+
+        return -1;
     }
 
     private void removeRoles(User discordUser){
