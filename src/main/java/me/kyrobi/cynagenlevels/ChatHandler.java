@@ -50,8 +50,8 @@ public class ChatHandler implements Listener {
     private HashMap<String, Integer> timesSaidWelcome = new HashMap<>();
 
     final int timeToSayWelcome = 35; // 20 seconds
-    final int expToGive = 600;
-    final int moneyToGive = 150;
+    final int expToGive = 500;
+    final int moneyToGive = 100;
 
     public ChatHandler(CynagenLevels plugin){
         this.plugin = plugin;
@@ -129,7 +129,7 @@ public class ChatHandler implements Listener {
             if(isWelcome(e.getMessage())){
                 if(shouldRewardWelcome(player.getName()) && !ChatAPI.isUsingPartyChat(e.getPlayer())){
                     giveEXPAmount(uuid, expToGive);
-                    player.sendMessage(ChatColor.GREEN + "Welcoming new player reward: \n" + ChatColor.GOLD + "+" +expToGive + "Chat EXP " + ChatColor.GRAY  + "(/level) " + ChatColor.GREEN + "and" + ChatColor.GOLD + " $" + moneyToGive);
+                    player.sendMessage(ChatColor.GREEN + "Welcoming new player reward: \n" + ChatColor.GOLD + "+" +expToGive + " Chat EXP " + ChatColor.GRAY  + "(/level) " + ChatColor.GREEN + "and" + ChatColor.GOLD + " $" + moneyToGive);
                     try {
                         ess.getUser(e.getPlayer()).giveMoney(new BigDecimal(moneyToGive));
                     } catch (MaxMoneyException ex) {
@@ -214,7 +214,7 @@ public class ChatHandler implements Listener {
                         e.getMessage().reply(e.getMember().getAsMention() + "\n**Welcoming new player reward:**\n" + "+" +expToGive + " Chat EXP " + "(`/level`) " + "and" + " $" + moneyToGive).queue();
                         // player.sendMessage(ChatColor.GREEN + "Welcoming new player reward: \n" + ChatColor.GOLD + "+" +amountToGive + "Chat EXP " + ChatColor.GRAY  + "(/level) " + ChatColor.GREEN + "and" + ChatColor.GOLD + " $100");
                         try {
-                            ess.getUser(offlinePlayer.getPlayer()).giveMoney(new BigDecimal(moneyToGive));
+                            ess.getUser(offlinePlayer.getUniqueId()).giveMoney(new BigDecimal(moneyToGive));
                         } catch (MaxMoneyException ex) {
                             throw new RuntimeException(ex);
                         }
