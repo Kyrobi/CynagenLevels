@@ -1,5 +1,7 @@
 package me.kyrobi.cynagenlevels;
 
+import com.earth2me.essentials.Essentials;
+import com.gmail.nossr50.api.ChatAPI;
 import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.ListenerPriority;
 import github.scarsz.discordsrv.api.Subscribe;
@@ -10,22 +12,24 @@ import github.scarsz.discordsrv.dependencies.jda.api.entities.Role;
 import github.scarsz.discordsrv.dependencies.jda.api.entities.*;
 import io.papermc.paper.event.player.AsyncChatEvent;
 
+import net.ess3.api.MaxMoneyException;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import github.scarsz.discordsrv.dependencies.jda.api.entities.User;
 import github.scarsz.discordsrv.util.DiscordUtil;
+import org.bukkit.event.player.PlayerJoinEvent;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.UUID;
+import java.math.BigDecimal;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static me.kyrobi.cynagenlevels.LevelHandler.*;
@@ -35,14 +39,23 @@ public class ChatHandler implements Listener {
     CynagenLevels plugin;
     JDA jda;
     Guild guild;
+    Essentials ess;
 
     private ArrayList<Pattern> filteredChat = new ArrayList<>();
     private ArrayList<String> whitelistedWords = new ArrayList<>();
 
     private HashMap<Integer, Role> levelRoles = new HashMap<>();
 
+    private Set<String> recentlyJoined = new HashSet<>();
+    private HashMap<String, Integer> timesSaidWelcome = new HashMap<>();
+
+    final int timeToSayWelcome = 35; // 20 seconds
+    final int expToGive = 600;
+    final int moneyToGive = 150;
+
     public ChatHandler(CynagenLevels plugin){
         this.plugin = plugin;
+        this.ess = (Essentials) Bukkit.getServer().getPluginManager().getPlugin("Essentials");
         this.jda = DiscordUtil.getJda();
         guild = jda.getGuildById("415873891857203212");
 
@@ -72,11 +85,27 @@ public class ChatHandler implements Listener {
 
     }
 
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerJoin(PlayerJoinEvent e) {
+        Player player = e.getPlayer();
+
+        if(!player.hasPlayedBefore()){
+            recentlyJoined.add(player.getName());
+
+            // Remove that player from the list 10 seconds later
+            Bukkit.getScheduler().runTaskLater(plugin, ()->{
+                recentlyJoined.remove(player.getName());
+            }, 20L * timeToSayWelcome);
+        }
+    }
+
     /*
     Listens to when a player chats ingame
      */
-    @EventHandler
-    public void onPlayerChatIngame(AsyncChatEvent e){
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerChatIngame(AsyncPlayerChatEvent e){
+
+        if(e.isCancelled()){ return; }
 
 //        if(!e.getPlayer().getName().equals("Kyrobi")){
 //            return;
@@ -84,12 +113,30 @@ public class ChatHandler implements Listener {
 
         Player player = e.getPlayer();
 
+        // Don't process party chats
+        if(ChatAPI.isUsingPartyChat(player)){
+            return;
+        }
+
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             /*If the player is only on the server, then still allow them to gain exp*/
 //            User user = getDiscordUser(player.getUniqueId());
 //            if(user == null){ return;}
 
             String uuid = player.getUniqueId().toString();
+
+            //Try to give EXP to people who say welcome
+            if(isWelcome(e.getMessage())){
+                if(shouldRewardWelcome(player.getName()) && !ChatAPI.isUsingPartyChat(e.getPlayer())){
+                    giveEXPAmount(uuid, expToGive);
+                    player.sendMessage(ChatColor.GREEN + "Welcoming new player reward: \n" + ChatColor.GOLD + "+" +expToGive + "Chat EXP " + ChatColor.GRAY  + "(/level) " + ChatColor.GREEN + "and" + ChatColor.GOLD + " $" + moneyToGive);
+                    try {
+                        ess.getUser(e.getPlayer()).giveMoney(new BigDecimal(moneyToGive));
+                    } catch (MaxMoneyException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                }
+            }
 
             // Don't do anything if on cooldown
             if(isOnCooldown(uuid)){
@@ -140,6 +187,9 @@ public class ChatHandler implements Listener {
 
         // We will try to give the user the role upon a message send. If a role was sucessfully given,
         String minecraftUUID = String.valueOf(getMinecraftUser(e.getAuthor().getId()).getUniqueId());
+        if(minecraftUUID == null){
+            return;
+        }
         int currentLevel = (int) getCurrentLevel(minecraftUUID);
         tryToGiveRankOnDiscord(e.getAuthor(), currentLevel);
 
@@ -149,10 +199,34 @@ public class ChatHandler implements Listener {
 
             String uuid = String.valueOf(player.getUniqueId());
 
+            //Try to give EXP to people who say welcome
+            if(e.getChannel().getName().equals("server-chat")){
+                if(isWelcome(e.getMessage().getContentRaw())){
+                    OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer( DiscordSRV.getPlugin().getAccountLinkManager().getUuid(e.getMember().getId()));
+
+                    System.out.println(DiscordSRV.getPlugin().getAccountLinkManager().getUuid(e.getMember().getId()).toString());
+
+                    System.out.println("Offline player " + offlinePlayer.getName());
+                    if(shouldRewardWelcome(offlinePlayer.getName())){
+                        giveEXPAmount(uuid, expToGive);
+
+                        // TextChannel txtChan = e.getGuild().getTextChannelById("562807748341923840");
+                        e.getMessage().reply(e.getMember().getAsMention() + "\n**Welcoming new player reward:**\n" + "+" +expToGive + " Chat EXP " + "(`/level`) " + "and" + " $" + moneyToGive).queue();
+                        // player.sendMessage(ChatColor.GREEN + "Welcoming new player reward: \n" + ChatColor.GOLD + "+" +amountToGive + "Chat EXP " + ChatColor.GRAY  + "(/level) " + ChatColor.GREEN + "and" + ChatColor.GOLD + " $100");
+                        try {
+                            ess.getUser(offlinePlayer.getPlayer()).giveMoney(new BigDecimal(moneyToGive));
+                        } catch (MaxMoneyException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    }
+                }
+            }
+
             // Don't do anything if on cooldown
             if(isOnCooldown(uuid)){
                 return;
             }
+
 
             User discordUser = getDiscordUser(UUID.fromString(uuid));
             int levelUpFlag = giveEXP(player.getUniqueId().toString());
@@ -309,6 +383,30 @@ public class ChatHandler implements Listener {
         return -1;
     }
 
+    // Checks to see if EXP should be rewarded for players that say welcome to new joiners
+    private boolean shouldRewardWelcome(String name){
+        if(!recentlyJoined.isEmpty()){
+            int timesSaid = timesSaidWelcome.getOrDefault(name, 0);
+
+            if(timesSaid < recentlyJoined.size()){
+
+                timesSaid++;
+                timesSaidWelcome.put(name, timesSaid);
+
+                Bukkit.getScheduler().runTaskLater(plugin, ()->{
+                    int timeSaidDecay = timesSaidWelcome.get(name) - 1;
+                    timesSaidWelcome.put(name, timeSaidDecay);
+                }, 20L * (timeToSayWelcome + 1));
+
+                return true;
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
     private void removeRoles(User discordUser){
         Member member = guild.getMemberById(discordUser.getId());
         List<Role> userRoles = member.getRoles();
@@ -319,4 +417,21 @@ public class ChatHandler implements Listener {
             }
         }
     }
+
+    public static boolean isWelcome(String str) {
+        // Regex pattern to match "welcome" at the beginning of the string,
+        // followed by optional punctuation and whitespace, ignoring case
+        String regex = "(?i)^welcome[!?,\\s]*.*";
+
+        // Compile the pattern
+        Pattern pattern = Pattern.compile(regex);
+
+        // Match the pattern against the input string
+        Matcher matcher = pattern.matcher(str);
+
+        // Check if the pattern is found in the string
+        return matcher.matches();
+    }
+
+
 }

@@ -1,7 +1,6 @@
 package me.kyrobi.cynagenlevels;
 
 import github.scarsz.discordsrv.DiscordSRV;
-import it.unimi.dsi.fastutil.Hash;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.OfflinePlayer;
@@ -90,7 +89,7 @@ public class LevelHandler {
         userCache.put(minecraftUUID, data);
     }
 
-    static long getCurrentLevel(String minecraftUUID){
+    public static long getCurrentLevel(String minecraftUUID){
         if(!userCache.containsKey(minecraftUUID)){
             putUserIntoCache(minecraftUUID);
         }
@@ -115,6 +114,37 @@ public class LevelHandler {
         }
 
         long expToGive = getRandomEXPAmount();
+
+        long currentLevel = getCurrentLevel(minecraftUUID);
+        long currentEXP = getCurrentEXP(minecraftUUID);
+        long EXPNeededUntilNextLevel = getEXPNeededUntilNextLevel(currentLevel, currentEXP);
+
+
+        long newLevel = currentLevel;
+        long newCurrentEXP = currentEXP;
+
+        if(expToGive >= EXPNeededUntilNextLevel){
+            newLevel++;
+            newCurrentEXP = expToGive - EXPNeededUntilNextLevel;
+            returnValue = (int) newLevel;
+        }
+        else {
+            newCurrentEXP += expToGive;
+        }
+
+        userCache.put(minecraftUUID, new Long[]{newLevel, newCurrentEXP});
+        return returnValue;
+
+        // Update the level logic
+    }
+
+    static int giveEXPAmount(String minecraftUUID, long amount){
+        int returnValue = 0;
+        if(!userCache.containsKey(String.valueOf(minecraftUUID))){
+            putUserIntoCache(String.valueOf(minecraftUUID));
+        }
+
+        long expToGive = amount;
 
         long currentLevel = getCurrentLevel(minecraftUUID);
         long currentEXP = getCurrentEXP(minecraftUUID);
