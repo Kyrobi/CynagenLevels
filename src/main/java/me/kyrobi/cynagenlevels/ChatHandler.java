@@ -50,7 +50,7 @@ public class ChatHandler implements Listener {
     private HashMap<String, Integer> timesSaidWelcome = new HashMap<>();
 
     final int timeToSayWelcome = 35; // 20 seconds
-    final int expToGive = 500;
+    final int expToGive = 300;
     final int moneyToGive = 100;
 
     public ChatHandler(CynagenLevels plugin){
