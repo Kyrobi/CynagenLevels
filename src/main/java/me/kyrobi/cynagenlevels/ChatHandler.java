@@ -50,8 +50,8 @@ public class ChatHandler implements Listener {
     private HashMap<String, Integer> timesSaidWelcome = new HashMap<>();
 
     final int timeToSayWelcome = 35; // 20 seconds
-    final int expToGive = 300;
-    final int moneyToGive = 100;
+    final int expToGive = 150;
+    // final int moneyToGive = 100;
 
     public ChatHandler(CynagenLevels plugin){
         this.plugin = plugin;
@@ -129,12 +129,7 @@ public class ChatHandler implements Listener {
             if(isWelcome(e.getMessage())){
                 if(shouldRewardWelcome(player.getName()) && !ChatAPI.isUsingPartyChat(e.getPlayer())){
                     giveEXPAmount(uuid, expToGive);
-                    player.sendMessage(ChatColor.GREEN + "Welcoming new player reward: \n" + ChatColor.GOLD + "+" +expToGive + " Chat EXP " + ChatColor.GRAY  + "(/level) " + ChatColor.GREEN + "and" + ChatColor.GOLD + " $" + moneyToGive);
-                    try {
-                        ess.getUser(e.getPlayer()).giveMoney(new BigDecimal(moneyToGive));
-                    } catch (MaxMoneyException ex) {
-                        throw new RuntimeException(ex);
-                    }
+                    player.sendMessage(ChatColor.GREEN + "+" +expToGive + ChatColor.GOLD + " Chat EXP " + ChatColor.GRAY  + "(/level) ");
                 }
             }
 
@@ -186,7 +181,9 @@ public class ChatHandler implements Listener {
         // if(!e.getMember().getId().equals("559428414709301279")){ return; }
 
         // We will try to give the user the role upon a message send. If a role was sucessfully given,
-        String minecraftUUID = String.valueOf(getMinecraftUser(e.getAuthor().getId()).getUniqueId());
+        OfflinePlayer ofp = getMinecraftUser(e.getAuthor().getId());
+        if(ofp == null || !ofp.hasPlayedBefore()){ return; }
+        String minecraftUUID = String.valueOf(ofp.getUniqueId());
         if(minecraftUUID == null){
             return;
         }
@@ -211,13 +208,8 @@ public class ChatHandler implements Listener {
                         giveEXPAmount(uuid, expToGive);
 
                         // TextChannel txtChan = e.getGuild().getTextChannelById("562807748341923840");
-                        e.getMessage().reply(e.getMember().getAsMention() + "\n**Welcoming new player reward:**\n" + "+" +expToGive + " Chat EXP " + "(`/level`) " + "and" + " $" + moneyToGive).queue();
+                        e.getMessage().reply(e.getMember().getAsMention() + "+" +expToGive + " Chat EXP " + "(`/level`)").queue();
                         // player.sendMessage(ChatColor.GREEN + "Welcoming new player reward: \n" + ChatColor.GOLD + "+" +amountToGive + "Chat EXP " + ChatColor.GRAY  + "(/level) " + ChatColor.GREEN + "and" + ChatColor.GOLD + " $100");
-                        try {
-                            ess.getUser(offlinePlayer.getUniqueId()).giveMoney(new BigDecimal(moneyToGive));
-                        } catch (MaxMoneyException ex) {
-                            throw new RuntimeException(ex);
-                        }
                     }
                 }
             }
