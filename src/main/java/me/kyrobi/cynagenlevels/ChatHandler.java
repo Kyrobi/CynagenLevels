@@ -389,7 +389,6 @@ public class ChatHandler implements Listener {
                     int timeSaidDecay = timesSaidWelcome.get(name) - 1;
                     timesSaidWelcome.put(name, timeSaidDecay);
                 }, 20L * (timeToSayWelcome + 1));
-
                 return true;
             }
 

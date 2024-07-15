@@ -25,8 +25,8 @@ Leveling formula: https://github.com/Mee6/Mee6-documentation/blob/master/docs/le
 public class LevelHandler {
 
     CynagenLevels plugin;
-    File dbFile = new File("");
     public File folderDirectory;
+    private static LevelHandler instance;
     public static String url;
 
     final static int messageCooldownSeconds = 60;
@@ -36,7 +36,9 @@ public class LevelHandler {
 
     public LevelHandler(CynagenLevels plugin){
         this.plugin = plugin;
-        folderDirectory = new File(dbFile.getAbsolutePath() + File.separator + "plugins" + File.separator + "CynagenLevels");
+        File dbFile = new File(plugin.getDataFolder(), "");
+        // folderDirectory = new File(dbFile.getPath() + File.separator + "plugins" + File.separator + "CynagenLevels");
+        folderDirectory = new File(dbFile.getPath());
         url = "jdbc:sqlite:" + folderDirectory + File.separator +"data.db";
 
         String createTableQuery = "CREATE TABLE IF NOT EXISTS PlayerData ("

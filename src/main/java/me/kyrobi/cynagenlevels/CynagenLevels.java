@@ -21,10 +21,9 @@ public final class CynagenLevels extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        this.saveDefaultConfig();
+        new LevelHandler(this);
 
         Bukkit.getScheduler().runTaskLater(this, () -> {
-            new LevelHandler(this);
 
             discordsrvListener = new ChatHandler(this);
             DiscordSRV.api.subscribe(discordsrvListener);
