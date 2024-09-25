@@ -121,7 +121,7 @@ public class LevelHandler {
         long currentEXP = getCurrentEXP(minecraftUUID);
         long EXPNeededUntilNextLevel = getEXPNeededUntilNextLevel(currentLevel, currentEXP);
 
-
+        
         long newLevel = currentLevel;
         long newCurrentEXP = currentEXP;
 

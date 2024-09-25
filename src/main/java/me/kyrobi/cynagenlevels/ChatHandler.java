@@ -2,6 +2,8 @@ package me.kyrobi.cynagenlevels;
 
 import com.earth2me.essentials.Essentials;
 import com.gmail.nossr50.api.ChatAPI;
+import com.gmail.nossr50.datatypes.player.McMMOPlayer;
+import com.gmail.nossr50.util.player.UserManager;
 import github.scarsz.discordsrv.DiscordSRV;
 import github.scarsz.discordsrv.api.ListenerPriority;
 import github.scarsz.discordsrv.api.Subscribe;
@@ -114,8 +116,11 @@ public class ChatHandler implements Listener {
         Player player = e.getPlayer();
 
         // Don't process party chats
-        if(ChatAPI.isUsingPartyChat(player)){
-            return;
+        McMMOPlayer mcMMOPlayer = UserManager.getPlayer(player);
+        if (mcMMOPlayer != null) {
+            if(ChatAPI.isUsingPartyChat(player)){
+                return;
+            }
         }
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
