@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/CynagenLevels.iml" filepath="$PROJECT_DIR$/CynagenLevels.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/CynagenLevels.iml" filepath="$PROJECT_DIR$/.idea/CynagenLevels.iml" />
     </modules>
   </component>
 </project>

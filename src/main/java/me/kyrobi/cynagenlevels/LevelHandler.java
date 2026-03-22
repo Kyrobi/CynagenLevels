@@ -15,31 +15,32 @@ import java.util.concurrent.ThreadLocalRandom;
 import static me.kyrobi.cynagenlevels.ChatHandler.getMinecraftUser;
 import static me.kyrobi.cynagenlevels.Commands.CommandLeaderboard.getPlayerRank;
 
-
 /*
 Reference:
 Amount of EXP to give: https://wiki.mee6.xyz/en/plugins/levels
 Leveling formula: https://github.com/Mee6/Mee6-documentation/blob/master/docs/levels_xp.md
-
- */
+*/
 public class LevelHandler {
 
-    CynagenLevels plugin;
+    private final CynagenLevels plugin;
     public File folderDirectory;
-    private static LevelHandler instance;
     public static String url;
 
-    final static int messageCooldownSeconds = 60;
+    static final int messageCooldownSeconds = 60;
 
-    public static HashMap<String, Long[]> userCache = new HashMap<>();
-    static HashMap<String, Long> usersOnCooldown = new HashMap<>();
+    // Private — access through the controlled methods below
+    private static final Map<String, Long[]> userCache = new HashMap<>();
+    private static final Map<String, Long> usersOnCooldown = new HashMap<>();
 
-    public LevelHandler(CynagenLevels plugin){
+    // Single shared connection, reopened if closed
+    private static Connection sharedConnection;
+    private static final Object dbLock = new Object();
+
+    public LevelHandler(CynagenLevels plugin) {
         this.plugin = plugin;
         File dbFile = new File(plugin.getDataFolder(), "");
-        // folderDirectory = new File(dbFile.getPath() + File.separator + "plugins" + File.separator + "CynagenLevels");
         folderDirectory = new File(dbFile.getPath());
-        url = "jdbc:sqlite:" + folderDirectory + File.separator +"data.db";
+        url = "jdbc:sqlite:" + folderDirectory + File.separator + "data.db";
 
         String createTableQuery = "CREATE TABLE IF NOT EXISTS PlayerData ("
                 + "UUID TEXT PRIMARY KEY,"
@@ -47,233 +48,189 @@ public class LevelHandler {
                 + "exp INTEGER"
                 + ");";
 
-        try(Connection conn = DriverManager.getConnection(url)){
-            Class.forName("org.sqlite.JDBC");
-            Statement stmt = conn.createStatement(); // Formulate the command to execute
-            stmt.execute(createTableQuery);  //Execute said command
-        }
-        catch (SQLException | ClassNotFoundException error){
-            Bukkit.getLogger().info(error.getMessage());
+        try {
+            sharedConnection = DriverManager.getConnection(url);
+            try (Statement stmt = sharedConnection.createStatement()) {
+                stmt.execute(createTableQuery);
+            }
+        } catch (SQLException error) {
+            plugin.getLogger().severe("Failed to initialize database: " + error.getMessage());
         }
     }
 
-    static void putUserIntoCache(String minecraftUUID){
-        if(userCache.containsKey(minecraftUUID)){
+    private static Connection getConnection() throws SQLException {
+        synchronized (dbLock) {
+            if (sharedConnection == null || sharedConnection.isClosed()) {
+                sharedConnection = DriverManager.getConnection(url);
+            }
+            return sharedConnection;
+        }
+    }
+
+    static void putUserIntoCache(String minecraftUUID) {
+        if (userCache.containsKey(minecraftUUID)) {
             return;
         }
 
-        Long[] data = new Long[2];
-
-        // SQL query to fetch the level and EXP for the given UUID
         String query = "SELECT level, exp FROM PlayerData WHERE UUID = ?";
-
-        try (Connection connection = DriverManager.getConnection(url);
-             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
-
-            preparedStatement.setString(1, minecraftUUID);
-
-            try (ResultSet resultSet = preparedStatement.executeQuery()) {
-                if (resultSet.next()) {
-                    long level = resultSet.getLong("level");
-                    long exp = resultSet.getLong("exp");
-                    data[0] = level;
-                    data[1] = exp;
+        synchronized (dbLock) {
+            try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+                ps.setString(1, minecraftUUID);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        userCache.put(minecraftUUID, new Long[]{rs.getLong("level"), rs.getLong("exp")});
+                    } else {
+                        userCache.put(minecraftUUID, new Long[]{0L, 0L});
+                    }
                 }
-                else{
-                    data[0] = 0L;
-                    data[1] = 0L;
-                }
+            } catch (SQLException e) {
+                Bukkit.getLogger().severe("putUserIntoCache error: " + e.getMessage());
             }
-        } catch (SQLException e) {
-            e.printStackTrace(); // Handle or log the exception
         }
-
-        userCache.put(minecraftUUID, data);
     }
 
-    public static long getCurrentLevel(String minecraftUUID){
-        if(!userCache.containsKey(minecraftUUID)){
+    public static long getCurrentLevel(String minecraftUUID) {
+        if (!userCache.containsKey(minecraftUUID)) {
             putUserIntoCache(minecraftUUID);
         }
         return userCache.get(minecraftUUID)[0];
     }
 
-    static long getCurrentEXP(String minecraftUUID){
-        if(!userCache.containsKey(minecraftUUID)){
+    public static long getCurrentEXP(String minecraftUUID) {
+        if (!userCache.containsKey(minecraftUUID)) {
             putUserIntoCache(minecraftUUID);
         }
         return userCache.get(minecraftUUID)[1];
     }
 
-    static long getEXPNeededUntilNextLevel(long currentLevel, long currentEXP){
+    static long getEXPNeededUntilNextLevel(long currentLevel, long currentEXP) {
         return 5 * (currentLevel * currentLevel) + (50 * currentLevel) + 100 - currentEXP;
     }
 
-    static int giveEXP(String minecraftUUID){
-        int returnValue = 0;
-        if(!userCache.containsKey(String.valueOf(minecraftUUID))){
-            putUserIntoCache(String.valueOf(minecraftUUID));
-        }
+    // giveEXP now delegates to giveEXPAmount to avoid duplication
+    static int giveEXP(String minecraftUUID) {
+        return giveEXPAmount(minecraftUUID, getRandomEXPAmount());
+    }
 
-        long expToGive = getRandomEXPAmount();
+    static int giveEXPAmount(String minecraftUUID, long amount) {
+        if (!userCache.containsKey(minecraftUUID)) {
+            putUserIntoCache(minecraftUUID);
+        }
 
         long currentLevel = getCurrentLevel(minecraftUUID);
         long currentEXP = getCurrentEXP(minecraftUUID);
-        long EXPNeededUntilNextLevel = getEXPNeededUntilNextLevel(currentLevel, currentEXP);
+        long expNeeded = getEXPNeededUntilNextLevel(currentLevel, currentEXP);
 
-        
         long newLevel = currentLevel;
-        long newCurrentEXP = currentEXP;
-
-        if(expToGive >= EXPNeededUntilNextLevel){
-            newLevel++;
-            newCurrentEXP = expToGive - EXPNeededUntilNextLevel;
-            returnValue = (int) newLevel;
-        }
-        else {
-            newCurrentEXP += expToGive;
-        }
-
-        userCache.put(minecraftUUID, new Long[]{newLevel, newCurrentEXP});
-        return returnValue;
-
-        // Update the level logic
-    }
-
-    static int giveEXPAmount(String minecraftUUID, long amount){
+        long newEXP = currentEXP;
         int returnValue = 0;
-        if(!userCache.containsKey(String.valueOf(minecraftUUID))){
-            putUserIntoCache(String.valueOf(minecraftUUID));
-        }
 
-        long expToGive = amount;
-
-        long currentLevel = getCurrentLevel(minecraftUUID);
-        long currentEXP = getCurrentEXP(minecraftUUID);
-        long EXPNeededUntilNextLevel = getEXPNeededUntilNextLevel(currentLevel, currentEXP);
-
-
-        long newLevel = currentLevel;
-        long newCurrentEXP = currentEXP;
-
-        if(expToGive >= EXPNeededUntilNextLevel){
+        if (amount >= expNeeded) {
             newLevel++;
-            newCurrentEXP = expToGive - EXPNeededUntilNextLevel;
+            newEXP = amount - expNeeded;
             returnValue = (int) newLevel;
-        }
-        else {
-            newCurrentEXP += expToGive;
+        } else {
+            newEXP += amount;
         }
 
-        userCache.put(minecraftUUID, new Long[]{newLevel, newCurrentEXP});
+        userCache.put(minecraftUUID, new Long[]{newLevel, newEXP});
         return returnValue;
-
-        // Update the level logic
     }
 
-    public static void saveCacheToSQL(){
-        System.out.println("Trying to save cache");
-        for (Map.Entry<String, Long[]> entry : userCache.entrySet()) {
-            String minecraftUUID = entry.getKey();
-            Long[] userData = entry.getValue();
-            long level = userData[0];
-            long exp = userData[1];
+    public static void saveCacheToSQL() {
+        Bukkit.getLogger().info("Saving level cache to database...");
 
-            // System.out.println("UUID: " + minecraftUUID + " level: " + level + " exp: " + exp);
-            writeToSQL(minecraftUUID, level, exp);
+        // Use a single connection and a batch for the entire cache flush
+        final String UPSERT = "INSERT OR REPLACE INTO PlayerData (UUID, level, exp) VALUES (?, ?, ?)";
+        synchronized (dbLock) {
+            try {
+                Connection conn = getConnection();
+                conn.setAutoCommit(false);
+                try (PreparedStatement ps = conn.prepareStatement(UPSERT)) {
+                    for (Map.Entry<String, Long[]> entry : userCache.entrySet()) {
+                        ps.setString(1, entry.getKey());
+                        ps.setLong(2, entry.getValue()[0]);
+                        ps.setLong(3, entry.getValue()[1]);
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                    conn.commit();
+                } catch (SQLException e) {
+                    conn.rollback();
+                    throw e;
+                } finally {
+                    conn.setAutoCommit(true);
+                }
+            } catch (SQLException e) {
+                Bukkit.getLogger().severe("saveCacheToSQL error: " + e.getMessage());
+            }
         }
     }
 
-    private static void writeToSQL(String minecraftUUID, long level, long exp){
-        final String UPDATE_USER_QUERY = "INSERT OR REPLACE INTO PlayerData (UUID, level, exp) VALUES (?, ?, ?)";
-        try (Connection connection = DriverManager.getConnection(url);
-             PreparedStatement preparedStatement = connection.prepareStatement(UPDATE_USER_QUERY)) {
-
-            // Set parameters for the query
-            preparedStatement.setString(1, minecraftUUID);
-            preparedStatement.setLong(2, level);
-            preparedStatement.setLong(3, exp);
-
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace(); // Handle or log the exception
-        }
+    public static long getRandomEXPAmount() {
+        return ThreadLocalRandom.current().nextLong(15, 26);
     }
 
+    public static boolean isOnCooldown(String minecraftUUID) {
+        long now = System.currentTimeMillis();
+        Long previousTime = usersOnCooldown.get(minecraftUUID);
 
-    public static long getRandomEXPAmount(){
-//        Random random = new Random();
-//        long range = max - min + 1;
-//        // Generate a random long within the full range of long values
-//        long value = random.nextLong();
-//        // Adjust the generated value to fit within the specified range
-//        value = Math.floorMod(value, range) + min;
-        long value = ThreadLocalRandom.current().nextLong(15, 25 + 1);
-        return value;
-    }
-
-    public static boolean isOnCooldown(String minecraftUUID){
-        if(!usersOnCooldown.containsKey(minecraftUUID)){
-            usersOnCooldown.put(minecraftUUID, System.currentTimeMillis());
+        if (previousTime == null) {
+            usersOnCooldown.put(minecraftUUID, now);
             return false;
         }
 
-        long previousTime = usersOnCooldown.get(minecraftUUID);
-        long currentTime = System.currentTimeMillis();
-
-        // If X seconds has passed
-        if((currentTime - previousTime) >= (messageCooldownSeconds * 1_000)){
-            usersOnCooldown.put(minecraftUUID, System.currentTimeMillis());
+        if ((now - previousTime) >= (messageCooldownSeconds * 1_000L)) {
+            usersOnCooldown.put(minecraftUUID, now);
             return false;
         }
 
         return true;
     }
 
+    // Called on player quit to prevent unbounded growth of usersOnCooldown
+    public static void removeFromCooldown(String minecraftUUID) {
+        usersOnCooldown.remove(minecraftUUID);
+    }
 
-    public static String getStatsForIngame(String minecraftUUID){
+    public static String getStatsForIngame(String minecraftUUID) {
         StringBuilder string = new StringBuilder();
 
         long currentEXP = getCurrentEXP(minecraftUUID);
         long totalEXPNeeded = currentEXP + getEXPNeededUntilNextLevel(getCurrentLevel(minecraftUUID), currentEXP);
 
         string.append(ChatColor.GRAY + "---------------\n");
-
         string.append(ChatColor.AQUA + "Name: " + ChatColor.WHITE + Bukkit.getOfflinePlayer(UUID.fromString(minecraftUUID)).getName() + "\n");
         string.append(ChatColor.AQUA + "Level: " + ChatColor.WHITE + getCurrentLevel(minecraftUUID) + "\n");
-        string.append(ChatColor.AQUA + "Rank: " + ChatColor.WHITE + "#" +  getPlayerRank(minecraftUUID) + "\n");
-        string.append(ChatColor.AQUA + "Progress: " + ChatColor.WHITE + insertCommasIntoNumber(currentEXP)  + ChatColor.GRAY + "/" + ChatColor.WHITE + insertCommasIntoNumber(totalEXPNeeded) + ChatColor.AQUA + "\n[" + ChatColor.WHITE + getEXPBar(minecraftUUID) + ChatColor.AQUA + "]\n");
-
-        string.append(ChatColor.GRAY + "\n" +"Chatting will give you EXP" + "\n");
-
+        string.append(ChatColor.AQUA + "Rank: " + ChatColor.WHITE + "#" + getPlayerRank(minecraftUUID) + "\n");
+        string.append(ChatColor.AQUA + "Progress: " + ChatColor.WHITE + insertCommasIntoNumber(currentEXP)
+                + ChatColor.GRAY + "/" + ChatColor.WHITE + insertCommasIntoNumber(totalEXPNeeded)
+                + ChatColor.AQUA + "\n[" + ChatColor.WHITE + getEXPBar(minecraftUUID) + ChatColor.AQUA + "]\n");
+        string.append(ChatColor.GRAY + "\nChatting will give you EXP\n");
         string.append(ChatColor.GRAY + "---------------");
 
         return string.toString();
     }
 
-    public static String getStatsForDiscord(String userID){
-        StringBuilder string = new StringBuilder();
-
+    public static String getStatsForDiscord(String userID) {
         OfflinePlayer player = getMinecraftUser(userID);
-        if(player == null){
+        if (player == null) {
             return "User does not exist";
         }
 
         String minecraftUUID = player.getUniqueId().toString();
-
         long currentEXP = getCurrentEXP(minecraftUUID);
         long totalEXPNeeded = currentEXP + getEXPNeededUntilNextLevel(getCurrentLevel(minecraftUUID), currentEXP);
 
+        StringBuilder string = new StringBuilder();
         string.append("---------------\n");
-
         string.append("**Name**: " + DiscordSRV.getPlugin().getJda().getUserById(userID).getAsTag() + "\n");
         string.append("**Level**: " + getCurrentLevel(minecraftUUID) + "\n");
-        string.append("**Rank**: " + " #" +getPlayerRank(minecraftUUID) + "\n");
-        string.append("**Progress**: " + insertCommasIntoNumber(getCurrentEXP(minecraftUUID))  + "/" + insertCommasIntoNumber(totalEXPNeeded) + "\n**[**" + getEXPBar(minecraftUUID) + "**]**" + "\n");
-
-        string.append("\n`Chatting will give you EXP.`" + "\n");
-
-        string.append( "---------------");
+        string.append("**Rank**: #" + getPlayerRank(minecraftUUID) + "\n");
+        string.append("**Progress**: " + insertCommasIntoNumber(currentEXP) + "/" + insertCommasIntoNumber(totalEXPNeeded)
+                + "\n**[**" + getEXPBar(minecraftUUID) + "**]**\n");
+        string.append("\n`Chatting will give you EXP.`\n");
+        string.append("---------------");
 
         return string.toString();
     }
@@ -284,35 +241,36 @@ public class LevelHandler {
         return formatter.format(number);
     }
 
-
-    public static String getEXPBar(String minecraftUUID){
-        final int totalBarSize = 10; // Sets how long the progress bar is
+    public static String getEXPBar(String minecraftUUID) {
+        final int totalBarSize = 10;
         long currentEXP = getCurrentEXP(minecraftUUID);
         long currentLevel = getCurrentLevel(minecraftUUID);
         long maxEXP = currentEXP + getEXPNeededUntilNextLevel(currentLevel, currentEXP);
 
         double percentageCompleted = ((double) currentEXP / maxEXP) * 100;
-
-        System.out.println("Current: " + currentEXP);
-        System.out.println("maxEXP: " + maxEXP);
-        System.out.println("% completed: " + percentageCompleted);
-
         int completedValue = (int) Math.floor(percentageCompleted);
 
         StringBuilder progressBar = new StringBuilder();
-
-        System.out.println("completedValue: " + completedValue);
-
-        for(int i = 0; i < totalBarSize; i++){
-            if(completedValue/10 >= i){
-                progressBar.append("\uD83D\uDFE9"); // Represents filled section
-            }
-            else{
-                progressBar.append("⬜"); // Represents empty sections
+        for (int i = 0; i < totalBarSize; i++) {
+            if (completedValue / 10 >= i) {
+                progressBar.append("\uD83D\uDFE9"); // filled
+            } else {
+                progressBar.append("⬜"); // empty
             }
         }
 
-
         return progressBar.toString();
+    }
+
+    /**
+     * Sets a player's level and EXP absolutely.
+     * Used by CommandAddPlayer to set a level without discarding existing EXP.
+     */
+    public static void setPlayerData(String minecraftUUID, long level, long exp) {
+        userCache.put(minecraftUUID, new Long[]{level, exp});
+    }
+
+    public static Map<String, Long[]> getUserCache() {
+        return Collections.unmodifiableMap(userCache);
     }
 }

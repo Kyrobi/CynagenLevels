@@ -3,241 +3,212 @@ package me.kyrobi.cynagenlevels.Commands;
 import github.scarsz.discordsrv.api.ListenerPriority;
 import github.scarsz.discordsrv.api.Subscribe;
 import github.scarsz.discordsrv.api.events.DiscordGuildMessageReceivedEvent;
-import io.papermc.paper.event.player.AsyncChatEvent;
 import me.kyrobi.cynagenlevels.CynagenLevels;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static me.kyrobi.cynagenlevels.LevelHandler.*;
 
 public class CommandLeaderboard implements CommandExecutor {
 
     CynagenLevels plugin;
-    static ArrayList<String[]> leaderboard = new ArrayList<>();
-    static long lastLeaderboardUpdate = 0;
+
+    // Volatile list reference — swap the whole list atomically instead of clearing and re-adding
+    private static volatile ArrayList<String[]> leaderboard = new ArrayList<>();
+
+    // AtomicLong so the staleness check is thread-safe without a full synchronized block
+    private static final AtomicLong lastLeaderboardUpdate = new AtomicLong(0);
     static final int leaderboardRefreshDelayInSeconds = 60 * 5;
 
-    public CommandLeaderboard(CynagenLevels plugin){
+    // Lock to prevent two concurrent refreshes from running simultaneously
+    private static final Object leaderboardLock = new Object();
+
+    public CommandLeaderboard(CynagenLevels plugin) {
         this.plugin = plugin;
     }
 
     @Override
-    public boolean onCommand(CommandSender commandSender, Command command, String label, String[] args){
-
-        if(args.length > 1){
+    public boolean onCommand(CommandSender commandSender, Command command, String label, String[] args) {
+        if (args.length > 1) {
             commandSender.sendMessage(ChatColor.RED + "Usage: /leveltop [page]");
             return false;
         }
 
-
-        new BukkitRunnable(){
-            public void run(){
-
-                if((System.currentTimeMillis() - lastLeaderboardUpdate) >= (leaderboardRefreshDelayInSeconds * 1000)){
-                    loadLeaderboard();
-                    lastLeaderboardUpdate = System.currentTimeMillis();
-                }
-
-                StringBuilder leaderboardBuilder = new StringBuilder();
-
-                int namesPerPage = 25;
-                int requestedPage = 1;
-                int maxPagePossible;
-
-                maxPagePossible = (int) Math.ceil((float)leaderboard.size() / (float)namesPerPage);
-
-                if(args.length == 1){
-                    try{
-                        requestedPage = Integer.parseInt(args[0]);
-                        if(requestedPage < 1){
-                            requestedPage = 1;
-                        }
-
-                        if(requestedPage > maxPagePossible){
-                            commandSender.sendMessage(ChatColor.RED + "There are only " + maxPagePossible + " pages available");
-                            return;
-                        }
-
-                    } catch (NumberFormatException e){
-                        commandSender.sendMessage(ChatColor.RED + args[0] + " is an invalid page number");
-                        return;
-                    }
-                }
-
-                leaderboardBuilder.append(ChatColor.DARK_AQUA + "Level Leaderboard" + "\n" + ChatColor.GRAY + "---------------" + "\n");
-
-                String leaderboardFooter = ChatColor.GRAY + "---------------" + "\n" + ChatColor.DARK_AQUA + "Page " + ChatColor.GRAY + "(" +
-                        ChatColor.AQUA + requestedPage + ChatColor.GRAY + "/" + ChatColor.AQUA + maxPagePossible + ChatColor.GRAY + ")";
-                try{
-                    for(int i = ((requestedPage - 1) * namesPerPage); i < namesPerPage * requestedPage; i++){
-                        String[] stats = leaderboard.get(i);
-
-                        String rank = stats[0];
-                        String name = stats[1];
-                        String level = stats[2];
-
-                        leaderboardBuilder.append(ChatColor.AQUA + rank + ". " + ChatColor.WHITE + name + ChatColor.DARK_AQUA + " Level: " +  ChatColor.AQUA + level + "\n");
-                    }
-
-                    leaderboardBuilder.append(
-                            leaderboardFooter);
-                    commandSender.sendMessage(leaderboardBuilder.toString());
-                } catch (IndexOutOfBoundsException e){
-                    leaderboardBuilder.append(
-                            leaderboardFooter);
-                    commandSender.sendMessage(leaderboardBuilder.toString());
-                }
-
+        new BukkitRunnable() {
+            public void run() {
+                refreshIfStale();
+                commandSender.sendMessage(buildPage(args.length == 1 ? args[0] : null, commandSender));
             }
         }.runTaskAsynchronously(plugin);
 
         return true;
-
     }
 
     @Subscribe(priority = ListenerPriority.MONITOR)
     public void discordMessageReceived(DiscordGuildMessageReceivedEvent e) {
-        if(e.getAuthor().isBot()){ return; }
-
+        if (e.getAuthor().isBot()) return;
 
         String[] args = e.getMessage().getContentRaw().split(" ");
+        if (!args[0].equals("!leveltop")) return;
 
-        if(!args[0].equals("!leveltop")){
-            return;
-        }
-
-        if(args.length > 2){
+        if (args.length > 2) {
             e.getMessage().reply("Usage: !leveltop [page]").queue();
             return;
         }
 
-
-        new BukkitRunnable(){
-            public void run(){
-
-                if((System.currentTimeMillis() - lastLeaderboardUpdate) >= (leaderboardRefreshDelayInSeconds * 1000)){
-                    loadLeaderboard();
-                    lastLeaderboardUpdate = System.currentTimeMillis();
-                }
-
-                StringBuilder leaderboardBuilder = new StringBuilder();
+        new BukkitRunnable() {
+            public void run() {
+                refreshIfStale();
 
                 int namesPerPage = 25;
                 int requestedPage = 1;
-                int maxPagePossible;
+                ArrayList<String[]> snap = leaderboard;
+                int maxPagePossible = (int) Math.ceil((float) snap.size() / (float) namesPerPage);
 
-                maxPagePossible = (int) Math.ceil((float)leaderboard.size() / (float)namesPerPage);
-
-                if(args.length == 2){
-                    try{
+                if (args.length == 2) {
+                    try {
                         requestedPage = Integer.parseInt(args[1]);
-                        if(requestedPage < 1){
-                            requestedPage = 1;
-                        }
-
-                        if(requestedPage > maxPagePossible){
+                        if (requestedPage < 1) requestedPage = 1;
+                        if (requestedPage > maxPagePossible) {
                             e.getMessage().reply("There are only " + maxPagePossible + " pages available").queue();
                             return;
                         }
-
-                    } catch (NumberFormatException nfe){
+                    } catch (NumberFormatException nfe) {
                         e.getMessage().reply(args[1] + " is an invalid page number").queue();
                         return;
                     }
                 }
 
-                leaderboardBuilder.append("Level Leaderboard" + "\n" + "---------------" + "\n");
+                StringBuilder sb = new StringBuilder("Level Leaderboard\n---------------\n");
+                String footer = "---------------\nPage (" + requestedPage + "/" + maxPagePossible + ")";
 
-                String leaderboardFooter = "---------------" + "\n" + "Page " + "(" +
-                        requestedPage + "/" + maxPagePossible + ")";
-                try{
-                    for(int i = ((requestedPage - 1) * namesPerPage); i < namesPerPage * requestedPage; i++){
-                        String[] stats = leaderboard.get(i);
-
-                        String rank = stats[0];
-                        String name = stats[1];
-                        String level = stats[2];
-
-                        leaderboardBuilder.append("**" + rank + "**. `" + name + "` **Level**: " +  level + "\n");
-                    }
-
-                    leaderboardBuilder.append(
-                            leaderboardFooter);
-                    e.getMessage().reply(leaderboardBuilder.toString()).queue();
-                } catch (IndexOutOfBoundsException ioob){
-                    leaderboardBuilder.append(
-                            leaderboardFooter);
-                    e.getMessage().reply(leaderboardBuilder.toString()).queue();
+                int start = (requestedPage - 1) * namesPerPage;
+                int end   = Math.min(start + namesPerPage, snap.size());
+                for (int i = start; i < end; i++) {
+                    String[] stats = snap.get(i);
+                    sb.append("**").append(stats[0]).append("**. `")
+                            .append(stats[1]).append("` **Level**: ").append(stats[2]).append("\n");
                 }
-
+                sb.append(footer);
+                e.getMessage().reply(sb.toString()).queue();
             }
         }.runTaskAsynchronously(plugin);
     }
 
-    private static void loadLeaderboard(){
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+
+    private static void refreshIfStale() {
+        long now = System.currentTimeMillis();
+        if (now - lastLeaderboardUpdate.get() < leaderboardRefreshDelayInSeconds * 1000L) return;
+
+        synchronized (leaderboardLock) {
+            // Double-checked locking — re-test inside the lock in case another thread just refreshed
+            if (now - lastLeaderboardUpdate.get() < leaderboardRefreshDelayInSeconds * 1000L) return;
+
+            loadLeaderboard();
+            lastLeaderboardUpdate.set(System.currentTimeMillis());
+        }
+    }
+
+    /**
+     * Builds the leaderboard page string for in-game use.
+     * pageArg may be null (defaults to page 1).
+     */
+    private static String buildPage(String pageArg, CommandSender sender) {
+        int namesPerPage = 25;
+        int requestedPage = 1;
+        ArrayList<String[]> snap = leaderboard; // local ref — thread-safe snapshot
+        int maxPagePossible = (int) Math.ceil((float) snap.size() / (float) namesPerPage);
+
+        if (pageArg != null) {
+            try {
+                requestedPage = Integer.parseInt(pageArg);
+                if (requestedPage < 1) requestedPage = 1;
+                if (requestedPage > maxPagePossible) {
+                    return ChatColor.RED + "There are only " + maxPagePossible + " pages available";
+                }
+            } catch (NumberFormatException e) {
+                return ChatColor.RED + pageArg + " is an invalid page number";
+            }
+        }
+
+        StringBuilder sb = new StringBuilder(
+                ChatColor.DARK_AQUA + "Level Leaderboard\n" + ChatColor.GRAY + "---------------\n");
+        String footer = ChatColor.GRAY + "---------------\n" + ChatColor.DARK_AQUA + "Page "
+                + ChatColor.GRAY + "(" + ChatColor.AQUA + requestedPage
+                + ChatColor.GRAY + "/" + ChatColor.AQUA + maxPagePossible + ChatColor.GRAY + ")";
+
+        // Use explicit bounds instead of catching IndexOutOfBoundsException
+        int start = (requestedPage - 1) * namesPerPage;
+        int end   = Math.min(start + namesPerPage, snap.size());
+        for (int i = start; i < end; i++) {
+            String[] stats = snap.get(i);
+            sb.append(ChatColor.AQUA).append(stats[0]).append(". ")
+                    .append(ChatColor.WHITE).append(stats[1])
+                    .append(ChatColor.DARK_AQUA).append(" Level: ")
+                    .append(ChatColor.AQUA).append(stats[2]).append("\n");
+        }
+        sb.append(footer);
+        return sb.toString();
+    }
+
+    private static void loadLeaderboard() {
         saveCacheToSQL();
-        leaderboard.clear();
-        // final String LEADERBOARD_QUERY = "SELECT RANK() OVER (ORDER BY level DESC, EXP DESC) as rank, UUID, level FROM PlayerData ORDER BY level DESC, EXP DESC";
-        final String LEADERBOARD_QUERY = "SELECT UUID, level, EXP FROM PlayerData ORDER BY level DESC, EXP DESC";
 
-        try (Connection connection = DriverManager.getConnection(url)) {
+        final String LEADERBOARD_QUERY =
+                "SELECT UUID, level, EXP FROM PlayerData ORDER BY level DESC, EXP DESC";
 
-            PreparedStatement getAmount = connection.prepareStatement(LEADERBOARD_QUERY);
+        ArrayList<String[]> fresh = new ArrayList<>();
 
-            ResultSet rs = getAmount.executeQuery();
+        try (Connection connection = DriverManager.getConnection(url);
+             PreparedStatement ps = connection.prepareStatement(LEADERBOARD_QUERY);
+             ResultSet rs = ps.executeQuery()) {
 
             int rank = 1;
             while (rs.next()) {
-                String uuid = rs.getString("UUID");
+                String uuid  = rs.getString("UUID");
                 String level = rs.getString("level");
-
-                String playerName = Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName();
-                String[] userData = {String.valueOf(rank), playerName, level};
-
-                // Bukkit.getLogger().info("Rank: " + rank + " " + playerName + " Level: " + level);
-                leaderboard.add(userData);
+                String name  = Bukkit.getOfflinePlayer(UUID.fromString(uuid)).getName();
+                fresh.add(new String[]{String.valueOf(rank), name, level});
                 rank++;
             }
 
         } catch (SQLException e) {
-            e.printStackTrace(); // Handle or log the exception
+            Bukkit.getLogger().severe("loadLeaderboard error: " + e.getMessage());
         }
+
+        // Swap the whole list atomically — no window where it's half-cleared
+        leaderboard = fresh;
     }
 
-    public static int getPlayerRank(String minecraftUUID){
+    public static int getPlayerRank(String minecraftUUID) {
         saveCacheToSQL();
-        // final String LEADERBOARD_QUERY = "SELECT RANK() OVER (ORDER BY level DESC, EXP DESC) as rank, UUID, level FROM PlayerData ORDER BY level DESC, EXP DESC";
-        final String PLAYER_QUERY = "SELECT rank FROM (SELECT RANK() OVER (ORDER BY level DESC, EXP DESC) as rank, UUID FROM PlayerData) WHERE UUID = ?";
-        int playerRank = -1;
+        final String PLAYER_QUERY =
+                "SELECT rank FROM (SELECT RANK() OVER (ORDER BY level DESC, EXP DESC) as rank, UUID FROM PlayerData) WHERE UUID = ?";
 
-        try (Connection connection = DriverManager.getConnection(url)) {
+        try (Connection connection = DriverManager.getConnection(url);
+             PreparedStatement ps = connection.prepareStatement(PLAYER_QUERY)) {
 
-            PreparedStatement getAmount = connection.prepareStatement(PLAYER_QUERY);
-
-            getAmount.setString(1, minecraftUUID);
-
-            ResultSet rs = getAmount.executeQuery();
-
-            if (rs.next()) {
-                playerRank = rs.getInt("rank");
+            ps.setString(1, minecraftUUID);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getInt("rank");
             }
 
-            rs.close();
-
         } catch (SQLException e) {
-            e.printStackTrace(); // Handle or log the exception
+            Bukkit.getLogger().severe("getPlayerRank error: " + e.getMessage());
         }
 
-        return playerRank;
+        return -1;
     }
 }
